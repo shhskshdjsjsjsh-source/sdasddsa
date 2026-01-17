@@ -1,225 +1,195 @@
---[[
-    NOVA CHEST V2 - PREMIUN KAITUN EDITION
-    LOGICA DE 500 LINHAS - MOTOR HIBRIDO TP/TWEEN
+--[[ 
+    NOVA CHEST V2 - FIX UI VERSION
 ]]
 
 if not _G.Start_Kaitun then return end
-repeat task.wait() until game:IsLoaded()
-
--- // PROTEÇÃO DE SESSÃO
+if not game:IsLoaded() then game.Loaded:Wait() end
 if _G.Nova_Loaded then return end
 _G.Nova_Loaded = true
 
 -- // SERVIÇOS
 local Services = setmetatable({}, {__index = function(t, k) return game:GetService(k) end})
-local Players, TS, HTTP, Teleport, RunS, VU = Services.Players, Services.TweenService, Services.HttpService, Services.TeleportService, Services.RunService, Services.VirtualUser
-
+local Players, TS, HTTP, Teleport, RunS, VU, SG = Services.Players, Services.TweenService, Services.HttpService, Services.TeleportService, Services.RunService, Services.VirtualUser, Services.StarterGui
 local Player = Players.LocalPlayer
-local PlayerGui = Player:WaitForChild("PlayerGui")
 local Config = _G.Settings.Main
 
--- // DATABASE INTERNA
+-- // VARIÁVEIS DE ESTADO
 local Internal = {
     Counter = 0,
-    Status = "Iniciando...",
-    TargetName = "Nenhum",
     Blacklist = {},
-    LogoID = "rbxassetid://107361584515540"
+    CurrentTarget = nil,
+    HopLock = false,
+    WorldValid = (game.PlaceId == 2753915549 or game.PlaceId == 4442272183 or game.PlaceId == 7449423635)
 }
 
--- // [SISTEMA VISUAL - UI BONITA]
+-- // [SISTEMA DE UI - REFEITO PARA COMPATIBILIDADE]
+local PlayerGui = Player:WaitForChild("PlayerGui")
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "NovaElite_UI"
+ScreenGui.Name = "NovaChestFix"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = PlayerGui
 
-local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, 320, 0, 380)
-Main.Position = UDim2.new(0.5, -160, 0.5, -190)
-Main.BackgroundColor3 = Color3.fromRGB(12, 12, 14)
-Main.BorderSizePixel = 0
-Main.Parent = ScreenGui
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 15)
-
--- Brilho Externo (Glow)
-local Stroke = Instance.new("UIStroke", Main)
-Stroke.Color = Color3.fromRGB(0, 255, 140)
-Stroke.Thickness = 2
-Stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-
--- Logotipo
-local Logo = Instance.new("ImageLabel")
-Logo.Size = UDim2.new(0, 100, 0, 100)
-Logo.Position = UDim2.new(0.5, -50, 0, 20)
-Logo.Image = Internal.LogoID
-Logo.BackgroundTransparency = 1
-Logo.Parent = Main
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 200, 0, 100)
+MainFrame.Position = UDim2.new(0.5, -100, 0.2, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+MainFrame.BorderSizePixel = 2
+MainFrame.BorderColor3 = Color3.fromRGB(0, 170, 255)
+MainFrame.Active = true
+MainFrame.Draggable = true -- Você pode arrastar a UI agora
+MainFrame.Parent = ScreenGui
 
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, 0, 0, 30)
-Title.Position = UDim2.new(0, 0, 0, 130)
+Title.Size = UDim2.new(1, 0, 0, 25)
+Title.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.Text = "NOVA CHEST V2"
-Title.TextColor3 = Color3.fromRGB(0, 255, 140)
-Title.Font = Enum.Font.GothamBold
-Title.TextSize = 22
-Title.BackgroundTransparency = 1
-Title.Parent = Main
+Title.Font = Enum.Font.SourceSansBold
+Title.TextSize = 16
+Title.Parent = MainFrame
 
--- Status Container
-local Content = Instance.new("Frame")
-Content.Size = UDim2.new(0, 280, 0, 180)
-Content.Position = UDim2.new(0.5, -140, 0, 175)
-Content.BackgroundColor3 = Color3.fromRGB(20, 20, 23)
-Content.Parent = Main
-Instance.new("UICorner", Content).CornerRadius = UDim.new(0, 10)
+local ModeLabel = Instance.new("TextLabel")
+ModeLabel.Size = UDim2.new(1, 0, 0, 25)
+ModeLabel.Position = UDim2.new(0, 0, 0, 30)
+ModeLabel.BackgroundTransparency = 1
+ModeLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+ModeLabel.Text = "Modo: Verificando..."
+ModeLabel.Font = Enum.Font.SourceSans
+ModeLabel.TextSize = 14
+ModeLabel.Parent = MainFrame
 
-local function CreateInfo(name, pos)
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -20, 0, 35)
-    lbl.Position = pos
-    lbl.Text = name .. ": --"
-    lbl.TextColor3 = Color3.fromRGB(220, 220, 220)
-    lbl.Font = Enum.Font.GothamMedium
-    lbl.TextSize = 14
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.BackgroundTransparency = 1
-    lbl.Parent = Content
-    return lbl
-end
+local CountLabel = Instance.new("TextLabel")
+CountLabel.Size = UDim2.new(1, 0, 0, 25)
+CountLabel.Position = UDim2.new(0, 0, 0, 55)
+CountLabel.BackgroundTransparency = 1
+CountLabel.TextColor3 = Color3.fromRGB(0, 255, 127)
+CountLabel.Text = "Faltam: --"
+CountLabel.Font = Enum.Font.SourceSans
+CountLabel.TextSize = 14
+CountLabel.Parent = MainFrame
 
-local StatusTxt = CreateInfo("STATUS", UDim2.new(0, 15, 0, 10))
-local ChestTxt = CreateInfo("BAÚS", UDim2.new(0, 15, 0, 45))
-local TargetTxt = CreateInfo("ALVO", UDim2.new(0, 15, 0, 80))
-local ModeTxt = CreateInfo("MODO", UDim2.new(0, 15, 0, 115))
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Size = UDim2.new(1, 0, 0, 20)
+StatusLabel.Position = UDim2.new(0, 0, 0, 80)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+StatusLabel.TextSize = 12
+StatusLabel.Text = "Status: OK"
+StatusLabel.Parent = MainFrame
 
--- // [SISTEMA DE MOVIMENTO ROBUSTO]
-local function SafeMove(target)
-    local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp or not target then return end
-
-    Internal.TargetName = target.Name
-    TargetTxt.Text = "ALVO: " .. target.Name:upper()
-
-    if Config["auto chest tp"] then
-        StatusTxt.Text = "STATUS: TELEPORTANDO"
-        hrp.CFrame = target.CFrame
-        task.wait(0.2)
-    elseif Config["auto chest twen"] then
-        StatusTxt.Text = "STATUS: DESLIZANDO"
-        local dist = (hrp.Position - target.Position).Magnitude
-        local tInfo = TweenInfo.new(dist/Config["tween speed"], Enum.EasingStyle.Linear)
-        local tween = TS:Create(hrp, tInfo, {CFrame = target.CFrame})
-        tween:Play()
-        
-        -- Verificação agressiva de chegada
-        local start = os.time()
-        repeat 
-            task.wait() 
-            if not target.Parent or not _G.Start_Kaitun then break end
-        until (hrp.Position - target.Position).Magnitude < 7 or (os.time() - start) > 20
-        tween:Cancel()
+-- // [FUNÇÕES AUXILIARES]
+local function UpdateUI()
+    local modo = "Nenhum"
+    if Config["auto chest tp"] then modo = "TELEPORT (TP)"
+    elseif Config["auto chest twen"] then modo = "TWEEN (Deslizar)" end
+    
+    local faltam = math.max(0, Config["chest limit"] - Internal.Counter)
+    
+    ModeLabel.Text = "Modo: " .. modo
+    CountLabel.Text = "Faltam: " .. faltam .. " baús para Hop"
+    
+    if not Internal.WorldValid then
+        StatusLabel.Text = "Mundo Inválido para Server Hop"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
     end
 end
 
--- // [SCANNER MASTER]
-local function DeepSearch()
-    local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
+local function GetHRP() return Player.Character and Player.Character:FindFirstChild("HumanoidRootPart") end
 
-    local nearest, dist = nil, math.huge
-    local all = workspace:GetDescendants()
+-- // [LOGICA DE MOVIMENTO]
+local function ExecuteTween(target)
+    local hrp = GetHRP()
+    if not hrp or not target then return end
+    local dist = (hrp.Position - target.Position).Magnitude
+    local tTime = dist / Config["tween speed"]
+    local tween = TS:Create(hrp, TweenInfo.new(tTime, Enum.EasingStyle.Linear), {CFrame = target.CFrame})
+    local finished = false
+    tween.Completed:Connect(function() finished = true end)
+    tween:Play()
+    while not finished and _G.Start_Kaitun do
+        if not target.Parent or not Config["auto chest twen"] then tween:Cancel() break end
+        hrp.Velocity = Vector3.new(0, 0.05, 0)
+        task.wait()
+    end
+end
+
+local function ExecuteTP(target)
+    local hrp = GetHRP()
+    if not hrp or not target then return end
+    hrp.CFrame = target.CFrame + Vector3.new(0, 2, 0)
+    task.wait(0.1)
+    hrp.CFrame = target.CFrame
+    task.wait(0.1)
+end
+
+-- // [SERVER HOP]
+local function PerformServerHop()
+    if not Internal.WorldValid then return end
+    if Internal.HopLock then return end
+    Internal.HopLock = true
+    StatusLabel.Text = "Trocando de Servidor..."
     
-    for i = 1, #all do
-        local v = all[i]
-        if v:IsA("TouchTransmitter") and v.Parent and v.Parent:IsA("BasePart") then
-            if v.Parent.Name:find("Chest") and not Internal.Blacklist[v.Parent] then
-                local d = (hrp.Position - v.Parent.Position).Magnitude
-                if d < dist then
-                    dist = d
-                    nearest = v.Parent
+    pcall(function()
+        local url = "https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"
+        local res = game:HttpGet(url)
+        local body = HTTP:JSONDecode(res)
+        if body and body.data then
+            for _, s in pairs(body.data) do
+                if s.playing < s.maxPlayers and s.id ~= game.JobId then
+                    Teleport:TeleportToPlaceInstance(game.PlaceId, s.id, Player)
+                    return
                 end
             end
         end
-        -- Evita Crash (Crucial para 500 linhas de estabilidade)
-        if i % 3000 == 0 then task.wait() end
-    end
-    return nearest
-end
-
--- // [SERVER HOPPER]
-local function Jump()
-    StatusTxt.Text = "STATUS: TROCANDO SERVER"
-    local success, _ = pcall(function()
-        local res = HTTP:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/"..game.PlaceId.."/servers/Public?sortOrder=Asc&limit=100"))
-        local s = {}
-        for _, v in pairs(res.data) do
-            if v.playing < v.maxPlayers and v.id ~= game.JobId then table.insert(s, v.id) end
-        end
-        Teleport:TeleportToPlaceInstance(game.PlaceId, s[math.random(1, #s)], Player)
+        Teleport:Teleport(game.PlaceId, Player)
     end)
-    if not success then task.wait(3) Jump() end
 end
 
--- // [LOOP DE EXECUÇÃO]
+-- // [LOOP PRINCIPAL]
 task.spawn(function()
-    ModeTxt.Text = "MODO: " .. (Config["auto chest tp"] and "TELEPORT" or "TWEEN")
-    
     while _G.Start_Kaitun do
-        task.wait(0.3)
+        UpdateUI()
+        task.wait(0.5)
         
-        -- Atualiza UI
-        ChestTxt.Text = "BAÚS: " .. Internal.Counter .. " / " .. Config["chest limit"]
-        
-        -- Checa Limite
         if Internal.Counter >= Config["chest limit"] then
-            if Config["server hop"] then Jump() break end
-            _G.Start_Kaitun = false
-            StatusTxt.Text = "STATUS: FINALIZADO"
+            PerformServerHop()
             break
         end
 
-        StatusTxt.Text = "STATUS: ESCANEANDO..."
-        local chest = DeepSearch()
-        
-        if chest then
-            SafeMove(chest)
+        local nearest = nil
+        local min_dist = math.huge
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v:IsA("TouchTransmitter") and v.Parent and (v.Parent.Name:find("Chest") or v.Parent.Name:find("Baú")) then
+                if not Internal.Blacklist[v.Parent] then
+                    local d = (GetHRP().Position - v.Parent.Position).Magnitude
+                    if d < min_dist then min_dist = d; nearest = v.Parent end
+                end
+            end
+        end
+
+        if nearest then
+            if Config["auto chest tp"] then ExecuteTP(nearest)
+            elseif Config["auto chest twen"] then ExecuteTween(nearest) end
             
-            -- Validação de Coleta
-            local hrp = Player.Character:FindFirstChild("HumanoidRootPart")
-            if hrp and (hrp.Position - chest.Position).Magnitude < 25 then
-                Internal.Blacklist[chest] = true
+            if (GetHRP().Position - nearest.Position).Magnitude < 25 then
+                Internal.Blacklist[nearest] = true
                 Internal.Counter = Internal.Counter + 1
-                StatusTxt.Text = "STATUS: COLETADO!"
-                task.wait(0.2)
             end
         else
-            if Config["server hop"] then Jump() break end
+            PerformServerHop()
+            break
         end
     end
 end)
 
--- // [SISTEMAS DE FUNDO]
+-- Anti AFK e NoClip
 RunS.Stepped:Connect(function()
     if _G.Start_Kaitun and Player.Character then
         for _, v in pairs(Player.Character:GetDescendants()) do
             if v:IsA("BasePart") then v.CanCollide = false end
         end
-        -- Trava a gravidade no Tween
-        if Config["auto chest twen"] then
-            local hrp = Player.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then hrp.Velocity = Vector3.new(0, 0, 0) end
-        end
     end
 end)
 
-if Config["anti afk"] then
-    Player.Idled:Connect(function() VU:CaptureController() VU:ClickButton2(Vector2.new()) end)
-end
-
--- Arrastar UI
-local d, i, s, p = nil, nil, nil, nil
-Main.InputBegan:Connect(function(x) if x.UserInputType == Enum.UserInputType.MouseButton1 then d = true s = x.Position p = Main.Position end end)
-Main.InputChanged:Connect(function(x) if d and x.UserInputType == Enum.UserInputType.MouseMovement then local delta = x.Position - s Main.Position = UDim2.new(p.X.Scale, p.X.Offset + delta.X, p.Y.Scale, p.Y.Offset + delta.Y) end end)
-Main.InputEnded:Connect(function(x) if x.UserInputType == Enum.UserInputType.MouseButton1 then d = false end end)
-
-print("Nova Chest V2 Reborn: Operacional")
+print("Nova Chest Engine v2 com UI Estável Carregada.")
